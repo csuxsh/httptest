@@ -16,6 +16,9 @@ import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.Toast;
 
+import com.show.api.ShowApiRequest;
+
+
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpRequest;
 import org.apache.http.HttpResponse;
@@ -24,11 +27,16 @@ import org.apache.http.client.methods.HttpPost;
 import org.apache.http.impl.client.DefaultHttpClient;
 
 import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.util.HashMap;
 import java.util.Map;
+
+import sun.misc.BASE64Encoder;
 
 
 public class MainActivity extends Activity implements OnClickListener {
@@ -37,22 +45,24 @@ public class MainActivity extends Activity implements OnClickListener {
     private String psw = "shao0013";
     private String url = "http://auth.gionee.com/login?service=http%3A%2F%2Fhr.gionee.com%2F";
     private String captchaUrl = "https://eapply.abchina.com/coin/Helper/ValidCode.ashx";
+    private String mTmpDir = "/sdcard/tmp_test/";
     private DefaultHttpClient mClient = new DefaultHttpClient();//http客户端
     Button button;
-    ImageView iv ;
+    ImageView iv;
     Handler mHandler;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        button = (Button)this.findViewById(R.id.button);
+        button = (Button) this.findViewById(R.id.button);
         button.setOnClickListener(this);
-        iv = (ImageView)this.findViewById(R.id.iamge);
-        mHandler = new Handler(){
+        iv = (ImageView) this.findViewById(R.id.iamge);
+        mHandler = new Handler() {
             @Override
             public void handleMessage(Message msg) {
                 super.handleMessage(msg);
-                iv.setImageBitmap((Bitmap)msg.obj);
+                iv.setImageBitmap((Bitmap) msg.obj);
             }
         };
     }
@@ -81,30 +91,39 @@ public class MainActivity extends Activity implements OnClickListener {
 
     @Override
     public void onClick(View v) {
-       /* new Thread(new Runnable() {
+       new Thread(new Runnable() {
             @Override
             public void run() {
                 captcha();
             }
         }).start();
-        */Toast.makeText(this,Build.DEVICE,Toast.LENGTH_SHORT).show();
+
+       // Toast.makeText(this, Build.DEVICE, Toast.LENGTH_SHORT).show();
     }
 
-
-    Bitmap captcha()  {
-        HttpGet httpGet = new HttpGet("http://auth.gionee.com/captcha");
+    // 识别验证码
+    String captcha() {
+        HttpGet httpGet = new HttpGet(captchaUrl);
         //HttpGet httpGet = new HttpGet("http://www.baidu.com");
 
         /* 发送请求并获得响应对象 */
         InputStream is = null;
+        FileOutputStream fos = null;
+        byte[] data = null;
         try {
             HttpResponse mHttpResponse = mClient.execute(httpGet);
             HttpEntity mHttpEntity = mHttpResponse.getEntity();
             is = mHttpEntity.getContent();
+            fos = new FileOutputStream(String.format("%s%s", mTmpDir, Thread.currentThread()));
             int lenth = is.available();
+            data = new byte[lenth];
+            is.read(data);
             Bitmap bitmap = BitmapFactory.decodeStream(is);
-            Message msg = Message. ();
+            BASE64Encoder encoder = new BASE64Encoder();
+            String code = encoder.encode(data);
+            Message msg = Message.obtain();
             msg.obj = bitmap;
+            // debug
             Log.d("xush", "count is " + mHttpEntity.getContentLength());
             BufferedReader bufferedReader = new BufferedReader(
                     new InputStreamReader(is));
@@ -112,18 +131,27 @@ public class MainActivity extends Activity implements OnClickListener {
             String result = "";
             String line = "";
 
-            while (null != (line = bufferedReader.readLine()))
-            {
+            while (null != (line = bufferedReader.readLine())) {
                 result += line;
             }
-
+            // debug
+            String appid="24624";//要替换成自己的
+            String secret="adc5e7e41c4747bf9ce3278fd55b8510";//要替换成自己的
+            final String res=new ShowApiRequest("http://route.showapi.com/184-1",appid,secret)
+                    .addTextPara("sd",code)
+                    //.addFilePara("sd", new File(String.format("%s%s", mTmpDir, Thread.currentThread())))
+                    .addTextPara("typeId", "")
+                    .addTextPara("convert_to_jpg", "")
+                    .post();
+            System.out.println(res);
             // 将结果打印出来，可以在LogCat查看
-           Log.d("xush", result);
+            Log.d("xush", result);
+            Log.d("xush", res);
             mHandler.sendMessage(msg);
-            return bitmap;
-        }catch(IOException e) {
+            return res;
+        } catch (IOException e) {
             return null;
-        }finally{
+        } finally {
             if (is != null) {
                 try {
                     is.close();
@@ -134,7 +162,7 @@ public class MainActivity extends Activity implements OnClickListener {
         }
     }
 
-    void sendHttpRequset (){
+    void sendHttpRequset() {
         captcha();
         DefaultHttpClient client = new DefaultHttpClient();//http客户端
         HttpPost httpPost = new HttpPost(url);
@@ -147,44 +175,5 @@ public class MainActivity extends Activity implements OnClickListener {
 
 
     }
-    /*
-    String decode() {
-        // 注意这里是普通会员账号，不是开发者账号，注册地址 http://www.yundama.com/index/reg/user
-        // 开发者可以联系客服领取免费调试题分
-        String username = "username";
-        String password	= "password";
 
-        // 测试时可直接使用默认的软件ID密钥，但要享受开发者分成必须使用自己的软件ID和密钥
-        // 1. http://www.yundama.com/index/reg/developer 注册开发者账号
-        // 2. http://www.yundama.com/developer/myapp 添加新软件
-        // 3. 使用添加的软件ID和密钥进行开发，享受丰厚分成
-        int 	appid	= 1;
-        String 	appkey	= "22cc5376925e9387a23cf797cb9ba745";
-
-        // 图片路径
-        String	imagepath	= "img\\test.png";
-
-        //  例：1004表示4位字母数字，不同类型收费不同。请准确填写，否则影响识别率。在此查询所有类型 http://www.yundama.com/price.html
-        int codetype = 1004;
-
-        // 只需要在初始的时候登陆一次
-        int uid = 0;
-        YDM.INSTANCE.YDM_SetAppInfo(appid, appkey);			// 设置软件ID和密钥
-        uid = YDM.INSTANCE.YDM_Login(username, password);	// 登陆到云打码
-
-        if(uid > 0){
-            System.out.println("登陆成功,正在提交识别...");
-
-            byte[] byteResult = new byte[30];
-            int cid = YDM.INSTANCE.YDM_DecodeByPath(imagepath, codetype, byteResult);
-            String strResult = new String(byteResult, "UTF-8").trim();
-
-            // 返回其他错误代码请查询 http://www.yundama.com/apidoc/YDM_ErrorCode.html
-            System.out.println("识别返回代码:" + cid);
-            System.out.println("识别返回结果:" + strResult);
-
-        }else{
-            System.out.println("登录失败，错误代码为：" + uid);
-        }
-        */
-    }
+}
