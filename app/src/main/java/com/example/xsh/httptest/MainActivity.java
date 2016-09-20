@@ -7,6 +7,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
+import android.util.Base64;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -25,18 +26,27 @@ import org.apache.http.HttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.impl.client.DefaultHttpClient;
+import org.json.JSONException;
+import org.json.JSONObject;
+import org.json.JSONTokener;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.lang.reflect.Array;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
-import sun.misc.BASE64Encoder;
+import Decoder.BASE64Encoder;
 
 
 public class MainActivity extends Activity implements OnClickListener {
@@ -91,10 +101,15 @@ public class MainActivity extends Activity implements OnClickListener {
 
     @Override
     public void onClick(View v) {
-       new Thread(new Runnable() {
+        try {
+            Thread.sleep(10000);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        new Thread(new Runnable() {
             @Override
             public void run() {
-                captcha();
+               // captcha();
             }
         }).start();
 
@@ -102,29 +117,35 @@ public class MainActivity extends Activity implements OnClickListener {
     }
 
     // 识别验证码
-    String captcha() {
+    private String captcha() {
         HttpGet httpGet = new HttpGet(captchaUrl);
-        //HttpGet httpGet = new HttpGet("http://www.baidu.com");
-
         /* 发送请求并获得响应对象 */
         InputStream is = null;
-        FileOutputStream fos = null;
+        ByteArrayOutputStream output =  null;
         byte[] data = null;
+        String ret = null;
+
         try {
             HttpResponse mHttpResponse = mClient.execute(httpGet);
             HttpEntity mHttpEntity = mHttpResponse.getEntity();
             is = mHttpEntity.getContent();
-            fos = new FileOutputStream(String.format("%s%s", mTmpDir, Thread.currentThread()));
-            int lenth = is.available();
-            data = new byte[lenth];
-            is.read(data);
+
             Bitmap bitmap = BitmapFactory.decodeStream(is);
-            BASE64Encoder encoder = new BASE64Encoder();
-            String code = encoder.encode(data);
+            if (bitmap == null) {
+                Log.e("xush", "图片获取失败");
+                return null;
+            }
+            output = new ByteArrayOutputStream();
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, output);
+            data = output.toByteArray();
+
+            String code = Base64.encodeToString(data, Base64.NO_WRAP);
+
             Message msg = Message.obtain();
+            byte[] data2 = Base64.decode(code, Base64.NO_WRAP);
             msg.obj = bitmap;
+
             // debug
-            Log.d("xush", "count is " + mHttpEntity.getContentLength());
             BufferedReader bufferedReader = new BufferedReader(
                     new InputStreamReader(is));
 
@@ -135,28 +156,46 @@ public class MainActivity extends Activity implements OnClickListener {
                 result += line;
             }
             // debug
+
+            // 识别验证码
             String appid="24624";//要替换成自己的
             String secret="adc5e7e41c4747bf9ce3278fd55b8510";//要替换成自己的
-            final String res=new ShowApiRequest("http://route.showapi.com/184-1",appid,secret)
-                    .addTextPara("sd",code)
+            final String res=new ShowApiRequest("http://route.showapi.com/184-2",appid,secret)
+                    .addTextPara("img_base64",code)
                     //.addFilePara("sd", new File(String.format("%s%s", mTmpDir, Thread.currentThread())))
-                    .addTextPara("typeId", "")
-                    .addTextPara("convert_to_jpg", "")
+                    .addTextPara("typeId", "3040")
+                    .addTextPara("convert_to_jpg", "1")
                     .post();
-            System.out.println(res);
-            // 将结果打印出来，可以在LogCat查看
-            Log.d("xush", result);
-            Log.d("xush", res);
+
+
+            JSONTokener jasonCaptcha = new JSONTokener(res);
+            try {
+                JSONObject captcha = (JSONObject) jasonCaptcha.nextValue();
+                ret = captcha.getJSONObject("showapi_res_body").getString("Result");
+            } catch (JSONException e) {
+                e.printStackTrace();
+                Log.e("xush", "jason 解析出错");
+            }
+            Log.e("xush", "captcha is "  + ret);
             mHandler.sendMessage(msg);
-            return res;
+            return ret;
         } catch (IOException e) {
+            e.printStackTrace();
             return null;
+
         } finally {
             if (is != null) {
                 try {
                     is.close();
                 } catch (IOException e) {
                     e.printStackTrace();
+                }
+            }
+            if (output != null) {
+                try {
+                    output.close();
+                }catch (IOException e2) {
+                    e2.printStackTrace();
                 }
             }
         }

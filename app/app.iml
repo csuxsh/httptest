@@ -88,6 +88,7 @@
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="library" exported="" name="showapi_sdk" level="project" />
     <orderEntry type="library" exported="" name="httpcore-4.0.1" level="project" />
+    <orderEntry type="library" exported="" name="sun.misc.BASE64Decoder" level="project" />
     <orderEntry type="library" exported="" name="httpclient-4.0.1" level="project" />
   </component>
 </module>
