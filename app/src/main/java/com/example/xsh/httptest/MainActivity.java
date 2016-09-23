@@ -1,8 +1,11 @@
 package com.example.xsh.httptest;
 
 import android.app.Activity;
+import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.net.Uri;
+import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -13,6 +16,7 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.View.OnClickListener;
+import android.webkit.WebView;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.Toast;
@@ -23,9 +27,11 @@ import com.show.api.ShowApiRequest;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpRequest;
 import org.apache.http.HttpResponse;
+import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.message.BasicNameValuePair;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.json.JSONTokener;
@@ -42,24 +48,31 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.lang.reflect.Array;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
+import java.util.Set;
 
 import Decoder.BASE64Encoder;
 
 
 public class MainActivity extends Activity implements OnClickListener {
 
-    private String id = "00001828";
-    private String psw = "shao0013";
-    private String url = "http://auth.gionee.com/login?service=http%3A%2F%2Fhr.gionee.com%2F";
-    private String captchaUrl = "https://eapply.abchina.com/coin/Helper/ValidCode.ashx";
+
+    private String mUrl = "https://eapply.abchina.com/coin/Coin/CoinSubmit?issueid=";//"http://auth.gionee.com/login?service=http%3A%2F%2Fhr.gionee.com%2F";
+    private String mCaptchaUrl = "https://eapply.abchina.com/coin/Helper/ValidCode.ashx";
+    private String mMmsCaptchaUrl = "https://eapply.abchina.com/coin/Coin/SendCaptchaCode";
     private String mTmpDir = "/sdcard/tmp_test/";
+    private String mMmsNum = "1069095599";
+
     private DefaultHttpClient mClient = new DefaultHttpClient();//http客户端
     Button button;
     ImageView iv;
     Handler mHandler;
+    WebView web;
+    SmsContent content;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -68,13 +81,29 @@ public class MainActivity extends Activity implements OnClickListener {
         button = (Button) this.findViewById(R.id.button);
         button.setOnClickListener(this);
         iv = (ImageView) this.findViewById(R.id.iamge);
+        web = (WebView)this.findViewById(R.id.webView);
         mHandler = new Handler() {
             @Override
             public void handleMessage(Message msg) {
                 super.handleMessage(msg);
-                iv.setImageBitmap((Bitmap) msg.obj);
+                if (msg.what == 1)
+                  iv.setImageBitmap((Bitmap) msg.obj);
+                web.loadUrl("file:///sdcard/tmp_test/ret.html");
             }
         };
+        /*
+        while(true) {
+            BatteryManager batteryManager = (BatteryManager)this.getSystemService(Context.BATTERY_SERVICE);
+            Log.d("xush", ""+ batteryManager.getIntProperty(4));
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+        */
+        content = new SmsContent(MainActivity.this, new Handler());
+        this.getContentResolver().registerContentObserver(Uri.parse("content://sms/"), true, content);
     }
 
     @Override
@@ -101,15 +130,11 @@ public class MainActivity extends Activity implements OnClickListener {
 
     @Override
     public void onClick(View v) {
-        try {
-            Thread.sleep(10000);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
+
         new Thread(new Runnable() {
             @Override
             public void run() {
-               // captcha();
+                sendHttpRequset();
             }
         }).start();
 
@@ -118,7 +143,7 @@ public class MainActivity extends Activity implements OnClickListener {
 
     // 识别验证码
     private String captcha() {
-        HttpGet httpGet = new HttpGet(captchaUrl);
+        HttpGet httpGet = new HttpGet(mCaptchaUrl);
         /* 发送请求并获得响应对象 */
         InputStream is = null;
         ByteArrayOutputStream output =  null;
@@ -142,6 +167,7 @@ public class MainActivity extends Activity implements OnClickListener {
             String code = Base64.encodeToString(data, Base64.NO_WRAP);
 
             Message msg = Message.obtain();
+            msg.what = 1;
             byte[] data2 = Base64.decode(code, Base64.NO_WRAP);
             msg.obj = bitmap;
 
@@ -201,18 +227,160 @@ public class MainActivity extends Activity implements OnClickListener {
         }
     }
 
+
+    String getMmsCaptcha(String captcha) {
+        HttpPost httpPost = new HttpPost(mMmsCaptchaUrl);
+        Map<String, String> parmas = new HashMap<String, String>();
+        parmas.put("mobile", "18620369547");
+        parmas.put("piccode", captcha) ;
+        String ret = sendPost(httpPost,parmas);
+
+
+        return "1234";
+    }
+
+    String sendPost(HttpPost post, Map<String, String> parmas) {
+        String returnConnection = null;
+
+        ArrayList<BasicNameValuePair> pairs = new ArrayList<BasicNameValuePair>();
+
+        if(parmas != null){
+            Set<String> keys = parmas.keySet();
+            for(Iterator<String> i = keys.iterator(); i.hasNext();) {
+                String key = (String)i.next();
+                pairs.add(new BasicNameValuePair(key, parmas.get(key)));
+            }
+        }
+
+        try {
+
+            UrlEncodedFormEntity p_entity = new UrlEncodedFormEntity(pairs, "utf-8");
+            post.setEntity(p_entity);
+            HttpResponse response = mClient.execute(post);
+            HttpEntity entity = response.getEntity();
+            InputStream content = entity.getContent();
+            FileOutputStream  fos = new FileOutputStream(new File(mTmpDir + "ret.html"));
+            if (convertStreamToHtml(fos, content)) {
+                Message msg = Message.obtain();
+                msg.what = 2;
+                mHandler.sendMessage(msg);
+            }
+
+        } catch (IllegalStateException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return returnConnection;
+    }
+
     void sendHttpRequset() {
-        captcha();
-        DefaultHttpClient client = new DefaultHttpClient();//http客户端
-        HttpPost httpPost = new HttpPost(url);
+        String captcha = captcha();
+        String mmsCaptcha = getMmsCaptcha(captcha);
+        synchronized (this) {
+            try {
+                // wait sms
+                this.wait();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+        mmsCaptcha = content.sms;
+        Log.d("xush", "sms is" + mmsCaptcha);
+        //DefaultHttpClient client = new DefaultHttpClient();//http客户端
+        HttpPost httpPost = new HttpPost(mUrl);
 
         Map<String, String> parmas = new HashMap<String, String>();
 
-        parmas.put("username", id);
-        parmas.put("password", psw);
-        parmas.put("j_captcha_response", "1");
+        parmas.put("name", "徐少华");
+        parmas.put("cardtype", "0");
+        parmas.put("identNo", "430682198803030515");
+        parmas.put("mobile", "18620369547");
+        parmas.put("piccode", captcha) ;
+        parmas.put("phoneCaptchaNo", mmsCaptcha);
+        parmas.put("orglevel1","深圳分行");
+        parmas.put("coindat", "2016-10-01" );
+        parmas.put("time", "amradio");
+
+        String ret = sendPost(httpPost,parmas);
+
+        Log.d("xush", "end" +  ret);
+    }
 
 
+
+
+
+    private String convertStreamToString(InputStream is) {
+
+        BufferedReader reader = new BufferedReader(new InputStreamReader(is));
+
+        StringBuilder sb = new StringBuilder();
+
+        String line = null;
+
+        try {
+
+            while ((line = reader.readLine()) != null) {
+
+                sb.append(line);
+                sb.append("\n");
+            }
+
+        } catch (IOException e) {
+
+            e.printStackTrace();
+
+        } finally {
+
+            try {
+
+                is.close();
+
+            } catch (IOException e) {
+
+                e.printStackTrace();
+
+            }
+
+        }
+
+        return sb.toString();
+
+    }
+
+    public boolean convertStreamToHtml(FileOutputStream fos, InputStream is){
+
+        byte[] buff = new byte[1024];
+        int count = -1;
+        Arrays.fill(buff, (byte)0);
+
+
+        try {
+            while ((count = (is.read(buff))) > 0) {
+                fos.write(buff, 0, count);
+            }
+            return true;
+
+        } catch (IOException e) {
+
+            e.printStackTrace();
+            return false;
+
+        } finally {
+
+            try {
+
+                is.close();
+                fos.close();
+
+            } catch (IOException e) {
+
+                e.printStackTrace();
+
+            }
+
+        }
     }
 
 }
